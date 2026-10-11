@@ -1,0 +1,7 @@
+ID     | Command line              | Date and time    | Action(s)      | Altered
+--------------------------------------------------------------------------------
+     5 | install -y libpcap        | 2026-10-11 19:52 | Install        |    2   
+     4 | install -y nginx libcap-n | 2026-10-11 19:51 | Install        |    5   
+     3 | -y upgrade                | 2026-10-11 19:38 | I, U           |  258   
+     2 | install -y policycoreutil | 2026-10-11 19:20 | I, U           |   15 E<
+     1 |                           | 2026-10-11 15:04 | Install        |  336 >E

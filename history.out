@@ -1,0 +1,180 @@
+    1  ls
+    3  cc
+    4  nmcli connection modify enp0s3 ipv4.method auto connection.autoconnect yes
+    5  hostnamectl set-hostname mephi-2026.domain.local
+    6  ping -c 4 8.8.8.8 > /root/ping.out
+    7  dnf -y upgrade
+    8  dnf install -y nginx libcap-ng-utils acl policycoreutils-python-utils
+    9  rm -f /tmp/tcpdump-*.rpm
+   10  dnf download --destdir /tmp tcpdump
+   11  rpm -q libpcap || dnf install -y libpcap
+   12  rpm -Uvh --replacepkgs /tmp/tcpdump-*.rpm
+   13  lsblk -o NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS
+   14  parted -s /dev/sdb mklabel gpt mkpart primary ext4 1MiB 100%
+   15  partprobe /dev/sdb
+   16  mkfs.ext4 -L MEPHI_WEB /dev/sdb1
+   17  mkdir -p /mephi-web
+   18  grep -q '^LABEL=MEPHI_WEB ' /etc/fstab || echo 'LABEL=MEPHI_WEB /mephi-web ext4 defaults 0 2' >> /etc/fstab
+   19  mount /mephi-web
+   20  findmnt /mephi-web
+   21  groupadd -g 5500 developers
+   22  groupadd -g 4444 curators
+   23  useradd -m -u 5501 -g developers user1
+   24  useradd -m -u 5502 -g developers user2
+   25  useradd -m -u 5503 -g developers user3
+   26  useradd -m -u 5601 -g curators curator1
+   27  useradd -m -u 5602 -g curators curator2
+   28  for u in user1 user2 user3 curator1 curator2; do p=$(openssl rand -base64 18); echo "$u:$p" | chpasswd; echo "$u $p" >> /root/mephi-user-passwords.txt; chage -M 90 "$u"; done
+   29  sed -ri 's/^[#[:space:]]*minlen[[:space:]]*=.*/minlen = 12/' /etc/security/pwquality.conf
+   30  grep -q '^minlen[[:space:]]*=[[:space:]]*12' /etc/security/pwquality.conf || echo 'minlen = 12' >> /etc/security/pwquality.conf
+   31  mkdir -p /data/mephi-2026
+   32  chown root:developers /data/mephi-2026
+   33  chmod 2770 /data/mephi-2026
+   34  setfacl -m u::rwx,g::rwx,g:curators:rx,m::rwx,o::--- /data/mephi-2026
+   35  setfacl -d -m u::rwx,g::rwx,g:curators:rx,m::rwx,o::--- /data/mephi-2026
+   36  runuser -u user1 -- touch /data/mephi-2026/user1.txt
+   37  runuser -u user2 -- sh -c 'echo shared-by-user2 >> /data/mephi-2026/user1.txt'
+   38  runuser -u user3 -- touch /data/mephi-2026/user3.txt
+   39  runuser -u curator1 -- cat /data/mephi-2026/user1.txt
+   40  ! runuser -u curator1 -- sh -c 'echo forbidden >> /data/mephi-2026/user1.txt'
+   41  getfacl /data/mephi-2026 /data/mephi-2026/user1.txt
+   42  grep -q 'pam_access.so' /etc/pam.d/login || echo 'account required pam_access.so' >> /etc/pam.d/login
+   43  grep -q '^-:curators:LOCAL$' /etc/security/access.conf || echo '-:curators:LOCAL' >> /etc/security/access.conf
+   44  tail -n 4 /etc/pam.d/login
+   45  tail -n 4 /etc/security/access.conf
+   46  chmod u-s /usr/sbin/tcpdump
+   47  setcap cap_net_admin,cap_net_raw=eip /usr/sbin/tcpdump
+   48  ping -c 4 127.0.0.1 >/dev/null &
+   49  runuser -u user1 -- timeout 8 /usr/sbin/tcpdump -nn -c 1 -i lo icmp > /root/tcpdump-test.out 2>&1
+   50  cat /root/tcpdump-test.out
+   51  getcap /usr/sbin/tcpdump
+   52  grep -nE 'listen|root|server_name' /etc/nginx/nginx.conf
+   53  printf 'Hello from Student: М265926\n' > /mephi-web/index.html
+   54  chmod 644 /mephi-web/index.html
+   55  sed -i '0,/root[[:space:]]*\/usr\/share\/nginx\/html;/s#root[[:space:]]*/usr/share/nginx/html;#root         /mephi-web;#' /etc/nginx/nginx.conf
+   56  semanage fcontext -a -t httpd_sys_content_t '/mephi-web(/.*)?'
+   57  restorecon -RFv /mephi-web
+   58  nginx -t
+   59  systemctl enable --now nginx
+   60  systemctl is-active firewalld >/dev/null && firewall-cmd --permanent --add-service=http && firewall-cmd --reload || true
+   61  curl http://localhost/ > /root/curl.out
+   62  cat /root/curl.out
+   63  sed -ri 's/^[#[:space:]]*PASS_MAX_DAYS[[:space:]]+.*/PASS_MAX_DAYS 90/' /etc/login.defs
+   64  systemctl daemon-reload
+   65  systemctl stop nginx
+   66  umount /mephi-web
+   67  mount -a
+   68  systemctl start nginx
+   69  findmnt /mephi-web
+   70  hostnamectl --static
+   71  nmcli -g ipv4.method connection show enp0s3
+   72  getent passwd user1 user2 user3 curator1 curator2
+   73  getent group developers curators
+   74  for u in user1 user2 user3 curator1 curator2; do chage -l "$u" | grep -E 'Password expires|Maximum number'; done
+   75  grep -E '^minlen|^PASS_MAX_DAYS' /etc/security/pwquality.conf /etc/login.defs
+   76  getenforce
+   77  ls -Zd /mephi-web /mephi-web/index.html
+   78  getfacl -p /data/mephi-2026
+   79  getcap /usr/sbin/tcpdump
+   80  systemctl is-enabled nginx
+   81  systemctl is-active nginx
+   82  curl -s http://localhost/
+   83  sed -i '/^[#[:space:]]*PASS_MAX_DAYS[[:space:]]/d' /etc/login.defs
+   84  echo 'PASS_MAX_DAYS 90' >> /etc/login.defs
+   85  grep '^PASS_MAX_DAYS' /etc/login.defs
+   86  history -w
+   87  nmcli connection modify enp0s3 ipv4.method auto connection.autoconnect yes
+   88  hostnamectl set-hostname mephi-2026.domain.local
+   89  ping -c 4 8.8.8.8 > /root/ping.out
+   90  dnf -y upgrade
+   91  dnf install -y nginx libcap-ng-utils acl policycoreutils-python-utils
+   92  rm -f /tmp/tcpdump-*.rpm
+   93  dnf download --destdir /tmp tcpdump
+   94  rpm -q libpcap || dnf install -y libpcap
+   95  rpm -Uvh --replacepkgs /tmp/tcpdump-*.rpm
+   96  lsblk -o NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS
+   97  parted -s /dev/sdb mklabel gpt mkpart primary ext4 1MiB 100%
+   98  partprobe /dev/sdb
+   99  mkfs.ext4 -L MEPHI_WEB /dev/sdb1
+  100  mkdir -p /mephi-web
+  101  grep -q '^LABEL=MEPHI_WEB ' /etc/fstab || echo 'LABEL=MEPHI_WEB /mephi-web ext4 defaults 0 2' >> /etc/fstab
+  102  mount /mephi-web
+  103  findmnt /mephi-web
+  104  groupadd -g 5500 developers
+  105  groupadd -g 4444 curators
+  106  useradd -m -u 5501 -g developers user1
+  107  useradd -m -u 5502 -g developers user2
+  108  useradd -m -u 5503 -g developers user3
+  109  useradd -m -u 5601 -g curators curator1
+  110  useradd -m -u 5602 -g curators curator2
+  111  for u in user1 user2 user3 curator1 curator2; do p=$(openssl rand -base64 18); echo "$u:$p" | chpasswd; echo "$u $p" >> /root/mephi-user-passwords.txt; chage -M 90 "$u"; done
+  112  sed -ri 's/^[#[:space:]]*minlen[[:space:]]*=.*/minlen = 12/' /etc/security/pwquality.conf
+  113  grep -q '^minlen[[:space:]]*=[[:space:]]*12' /etc/security/pwquality.conf || echo 'minlen = 12' >> /etc/security/pwquality.conf
+  114  mkdir -p /data/mephi-2026
+  115  chown root:developers /data/mephi-2026
+  116  chmod 2770 /data/mephi-2026
+  117  setfacl -m u::rwx,g::rwx,g:curators:rx,m::rwx,o::--- /data/mephi-2026
+  118  setfacl -d -m u::rwx,g::rwx,g:curators:rx,m::rwx,o::--- /data/mephi-2026
+  119  runuser -u user1 -- touch /data/mephi-2026/user1.txt
+  120  runuser -u user2 -- sh -c 'echo shared-by-user2 >> /data/mephi-2026/user1.txt'
+  121  runuser -u user3 -- touch /data/mephi-2026/user3.txt
+  122  runuser -u curator1 -- cat /data/mephi-2026/user1.txt
+  123  ! runuser -u curator1 -- sh -c 'echo forbidden >> /data/mephi-2026/user1.txt'
+  124  getfacl /data/mephi-2026 /data/mephi-2026/user1.txt
+  125  grep -q 'pam_access.so' /etc/pam.d/login || echo 'account required pam_access.so' >> /etc/pam.d/login
+  126  grep -q '^-:curators:LOCAL$' /etc/security/access.conf || echo '-:curators:LOCAL' >> /etc/security/access.conf
+  127  tail -n 4 /etc/pam.d/login
+  128  tail -n 4 /etc/security/access.conf
+  129  chmod u-s /usr/sbin/tcpdump
+  130  setcap cap_net_admin,cap_net_raw=eip /usr/sbin/tcpdump
+  131  ping -c 4 127.0.0.1 >/dev/null &
+  132  runuser -u user1 -- timeout 8 /usr/sbin/tcpdump -nn -c 1 -i lo icmp > /root/tcpdump-test.out 2>&1
+  133  cat /root/tcpdump-test.out
+  134  getcap /usr/sbin/tcpdump
+  135  grep -nE 'listen|root|server_name' /etc/nginx/nginx.conf
+  136  printf 'Hello from Student: М265926\n' > /mephi-web/index.html
+  137  chmod 644 /mephi-web/index.html
+  138  sed -i '0,/root[[:space:]]*\/usr\/share\/nginx\/html;/s#root[[:space:]]*/usr/share/nginx/html;#root         /mephi-web;#' /etc/nginx/nginx.conf
+  139  semanage fcontext -a -t httpd_sys_content_t '/mephi-web(/.*)?'
+  140  restorecon -RFv /mephi-web
+  141  nginx -t
+  142  systemctl enable --now nginx
+  143  systemctl is-active firewalld >/dev/null && firewall-cmd --permanent --add-service=http && firewall-cmd --reload || true
+  144  curl http://localhost/ > /root/curl.out
+  145  cat /root/curl.out
+  146  sed -ri 's/^[#[:space:]]*PASS_MAX_DAYS[[:space:]]+.*/PASS_MAX_DAYS 90/' /etc/login.defs
+  147  systemctl daemon-reload
+  148  systemctl stop nginx
+  149  umount /mephi-web
+  150  mount -a
+  151  systemctl start nginx
+  152  findmnt /mephi-web
+  153  hostnamectl --static
+  154  nmcli -g ipv4.method connection show enp0s3
+  155  getent passwd user1 user2 user3 curator1 curator2
+  156  getent group developers curators
+  157  for u in user1 user2 user3 curator1 curator2; do chage -l "$u" | grep -E 'Password expires|Maximum number'; done
+  158  grep -E '^minlen|^PASS_MAX_DAYS' /etc/security/pwquality.conf /etc/login.defs
+  159  getenforce
+  160  ls -Zd /mephi-web /mephi-web/index.html
+  161  getfacl -p /data/mephi-2026
+  162  getcap /usr/sbin/tcpdump
+  163  systemctl is-enabled nginx
+  164  systemctl is-active nginx
+  165  curl -s http://localhost/
+  166  sed -i '/^[#[:space:]]*PASS_MAX_DAYS[[:space:]]/d' /etc/login.defs
+  167  echo 'PASS_MAX_DAYS 90' >> /etc/login.defs
+  168  grep '^PASS_MAX_DAYS' /etc/login.defs
+  169  history -w
+  170  systemctl reboot
+  171  ping -c 4 8.8.8.8 > /root/ping.out
+  172  dnf history > /root/dnf.out
+  173  stat /data/mephi-2026 > /root/stat.out
+  174  stat /mephi-web >> /root/stat.out
+  175  getcap /usr/sbin/tcpdump > /root/getcap.out
+  176  journalctl -u nginx -b > /root/journalctl.out
+  177  getenforce > /root/getenforce.out
+  178  curl http://localhost/ > /root/curl.out
+  179  ping -c 4 127.0.0.1 >/dev/null &
+  180  runuser -u user1 -- timeout 8 /usr/sbin/tcpdump -nn -c 1 -i lo icmp
+  181  history > /root/history.out
